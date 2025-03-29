@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "image-anim",
+  "name": "image-anim1",
   "compatibility_date": "2024-11-01",
   "upload_source_maps": true,
   "main": "./server.ts",
