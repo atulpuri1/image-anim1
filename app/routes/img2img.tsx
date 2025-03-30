@@ -1,33 +1,47 @@
+import type { ActionFunctionArgs } from "@remix-run/cloudflare";
+
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const delta = formData.get("delta");
-  const image = formData.get("image");
 
-  console.log("Delta prompt:", delta);
-  console.log("Image:", image);
+  if (typeof delta !== "string") {
+    return new Response("Missing delta prompt", {
+      status: 400,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  }
 
-  if (typeof delta !== "string" || !(image instanceof File)) {
-    console.error("Missing delta prompt or image");
-    return new Response("Missing delta prompt or image", { status: 400 });
+  const base64 = await context.env.IMAGES.get("latest");
+
+  if (!base64) {
+    return new Response("No image found in KV", {
+      status: 404,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
   }
 
   try {
-    const imageBuffer = await image.arrayBuffer();
-
-    const generated = await context.env.AI.run(
-      "@cf/stabilityai/stable-diffusion-v1-5-img2img",
+    const result = await context.env.AI.run(
+      "@cf/runwayml/stable-diffusion-v1-5-img2img",
       {
         prompt: delta,
-        image: new Uint8Array(imageBuffer),
-        strength: 0.75, // You can tune this if needed
+        image_b64: base64,
+        strength: 0.75,
       }
     );
 
-    return new Response(generated, {
-      headers: { "Content-Type": "image/png" },
+    const arrayBuffer = await new Response(result).arrayBuffer();
+
+    return new Response(arrayBuffer, {
+      headers: {
+        "Content-Type": "image/png",
+        "Access-Control-Allow-Origin": "*",
+      },
     });
   } catch (err) {
-    console.error("img2img generation failed", err);
-    return new Response("Error generating delta image", { status: 500 });
+    return new Response("Error generating variation", {
+      status: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
   }
 };
