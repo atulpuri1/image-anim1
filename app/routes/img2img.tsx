@@ -1,33 +1,51 @@
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const delta = formData.get("delta");
-  const image = formData.get("image");
+  const image_b64 = formData.get("image_b64")?.toString();
+  const numSteps = parseInt(formData.get("num_steps") as string);
+  const strength = parseFloat(formData.get("strength") as string);
+  const guidance = parseFloat(formData.get("guidance_scale") as string);
+  const seedRaw = formData.get("seed");
+  const seed = seedRaw ? parseInt(seedRaw as string) : undefined;
 
-  console.log("Delta prompt:", delta);
-  console.log("Image:", image);
-
-  if (typeof delta !== "string" || !(image instanceof File)) {
-    console.error("Missing delta prompt or image");
-    return new Response("Missing delta prompt or image", { status: 400 });
+  if (!image_b64 || typeof delta !== "string") {
+    return new Response("Missing required parameters", {
+      status: 400,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
   }
 
   try {
-    const imageBuffer = await image.arrayBuffer();
+    const payload: Record<string, any> = {
+      prompt: delta,
+      image_b64,
+      strength: isNaN(strength) ? 0.75 : strength,
+    };
 
-    const generated = await context.env.AI.run(
-      "@cf/stabilityai/stable-diffusion-v1-5-img2img",
-      {
-        prompt: delta,
-        image: new Uint8Array(imageBuffer),
-        strength: 0.75, // You can tune this if needed
-      }
+    if (!isNaN(numSteps)) payload.num_steps = numSteps;
+    if (!isNaN(guidance)) payload.guidance = guidance;
+    if (!isNaN(seed)) payload.seed = seed;
+
+    console.log("Payload:", JSON.stringify(payload, null, 2));
+
+    const result = await context.env.AI.run(
+      "@cf/runwayml/stable-diffusion-v1-5-img2img",
+      payload
     );
 
-    return new Response(generated, {
-      headers: { "Content-Type": "image/png" },
+    const arrayBuffer = await new Response(result).arrayBuffer();
+
+    return new Response(arrayBuffer, {
+      headers: {
+        "Content-Type": "image/png",
+        "Access-Control-Allow-Origin": "*",
+      },
     });
-  } catch (err) {
-    console.error("img2img generation failed", err);
-    return new Response("Error generating delta image", { status: 500 });
+  } catch (err: any) {
+    console.error("img2img error:", err);
+    return new Response("Error generating variation: " + err.message, {
+      status: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
   }
 };
